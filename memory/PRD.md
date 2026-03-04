@@ -1,6 +1,6 @@
 # FOMO Market Data API - PRD
 
-## Version: 3.1.0 (Updated 2026-03-04)
+## Version: 3.2.0 (Updated 2026-03-04)
 
 ## Original Problem Statement
 Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap.
@@ -21,7 +21,9 @@
 │                    LAYER 2: Intel API                   │
 │  Dropstab / CryptoRank                                  │
 │           ↓                                             │
-│  Scrapers → Parsers → MongoDB → Moderation → API       │
+│  Source Manager → Scraper Engine → Parsers             │
+│           ↓                                             │
+│  Entity Resolver → MongoDB → Moderation → API          │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -46,22 +48,44 @@
 
 | Компонент | Статус |
 |-----------|--------|
+| **Scraper Engine** | ✅ BaseScraper + Registry |
+| **Source Manager** | ✅ Priority + Health |
+| **Entity Resolver** | ✅ Canonical entities |
+| **Relationship Builder** | ✅ Entity relations |
 | **Investors** | ✅ intel_investors |
 | **Unlocks** | ✅ intel_unlocks |
 | **Fundraising** | ✅ intel_fundraising |
 | **Projects** | ✅ intel_projects |
 | **Activity** | ✅ intel_activity |
 | **Moderation Queue** | ✅ moderation_queue |
-| Dropstab Client | ✅ Done |
-| Parsers | ✅ 5 types |
-| Sync Service | ✅ Done |
+
+### Intel Module Structure
+```
+modules/intel/
+├── engine/           # Scraper infrastructure
+│   ├── base_scraper.py
+│   ├── registry.py
+│   ├── scheduler.py
+│   └── source_manager.py
+├── entities/         # Entity normalization
+│   ├── resolver.py
+│   └── relations.py
+├── dropstab/         # Dropstab source
+│   ├── client.py
+│   ├── sync.py
+│   └── parsers/
+└── api/              # REST endpoints
+```
 
 ### Intel API Endpoints
+- `GET /api/intel/stats` — Statistics
+- `GET /api/intel/sources` — Data sources
+- `GET /api/intel/health` — System health
+- `GET /api/intel/entities` — Canonical entities
 - `GET /api/intel/investors` — VCs/Funds
 - `GET /api/intel/unlocks/upcoming` — Token unlocks
 - `GET /api/intel/fundraising/recent` — Funding rounds
 - `GET /api/intel/projects` — Projects
-- `GET /api/intel/activity` — News feed
 - `GET /api/intel/moderation` — Admin queue
 - `POST /api/intel/sync/dropstab` — Trigger sync
 
