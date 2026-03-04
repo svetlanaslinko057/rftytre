@@ -194,8 +194,8 @@ class CandleIngestor:
             
             # Fetch candles
             candles = await provider.get_candles(
-                symbol=symbol,
-                interval=tf,
+                native_symbol=symbol,
+                granularity=tf,
                 limit=min(depth, 1000)  # API limit
             )
             
