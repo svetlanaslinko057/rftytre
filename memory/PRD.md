@@ -1,35 +1,56 @@
 # FOMO Market Data API - PRD
 
-## Version: 2.3.0 (Updated 2026-03-04)
+## Version: 3.0.0 (Updated 2026-03-04)
 
 ## Original Problem Statement
-Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap для получения real-time и исторических данных из Binance / Bybit / Coinbase / Hyperliquid.
+Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap для получения real-time и исторических данных.
 
-## Architecture Principle
-```
-Provider → Raw Data → Normalizer → Redis Store → Aggregation → API
-                                        ↓
-                              ClickHouse (Historical)
-                                        ↓
-                                  TA Engine
-```
+## Architecture
 
-**Мы забираем ВСЁ, что отдают провайдеры. Не выбирать. Не оптимизировать. Не фильтровать.**
+```
+┌─────────────────────────────────────────────────────────┐
+│                    LAYER 1: Exchange API                │
+│  Binance │ Bybit │ Coinbase │ Hyperliquid              │
+│           ↓                                             │
+│  Adapters → Normalizer → Redis → Aggregation → API     │
+│                              ↓                          │
+│                       ClickHouse (Historical)           │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                    LAYER 2: Unlock API                  │
+│  Dropstab / CryptoRank                                  │
+│           ↓                                             │
+│  Scraper → MongoDB → API                                │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Layer 1 Roadmap Status
+## Layer 1 — Exchange API ✅ COMPLETE
 
-| Этап | Название | Статус |
-|------|----------|--------|
-| 1 | Provider Coverage | ✅ 80% |
-| 2 | Instrument Registry | ✅ Done |
-| 3 | Data Normalization | ✅ Done |
-| 4 | Aggregation Engine v2 | ✅ Done |
-| 5 | Redis Cache | ✅ Done |
-| 6 | WebSocket Gateway | ⏳ P1 |
-| 7 | **Historical Candle Storage** | ✅ Done |
-| 8 | Market API | ✅ Done |
+| Компонент | Статус |
+|-----------|--------|
+| Provider Adapters | ✅ Done (4 биржи) |
+| Instrument Registry | ✅ 606 instruments |
+| Data Normalization | ✅ Done |
+| Aggregation Engine | ✅ Done |
+| Redis Cache | ✅ Done |
+| Historical Storage | ✅ ClickHouse |
+| Market API | ✅ Done |
+| WebSocket Gateway | ⏳ P2 |
+
+---
+
+## Layer 2 — Unlock API ✅ COMPLETE
+
+| Компонент | Статус |
+|-----------|--------|
+| Projects DB | ✅ MongoDB |
+| Token Unlocks DB | ✅ MongoDB |
+| Dropstab Scraper | ✅ Done |
+| Projects API | ✅ Done |
+| Unlocks API | ✅ Done |
 
 ---
 
