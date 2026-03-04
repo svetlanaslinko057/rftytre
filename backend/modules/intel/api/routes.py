@@ -4,7 +4,7 @@ Endpoints for crypto intelligence data
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import logging
 
