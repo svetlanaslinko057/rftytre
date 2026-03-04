@@ -19,14 +19,21 @@ def get_db():
 
 
 def get_dropstab_sync():
-    """Dependency to get sync service"""
+    """Dependency to get Dropstab sync service"""
     from server import db
     from ..dropstab.sync import DropstabSync
     return DropstabSync(db)
 
 
+def get_cryptorank_sync():
+    """Dependency to get CryptoRank sync service"""
+    from server import db
+    from ..sources.cryptorank.sync import CryptoRankSync
+    return CryptoRankSync(db)
+
+
 # ═══════════════════════════════════════════════════════════════
-# SYNC ENDPOINTS
+# SYNC ENDPOINTS - DROPSTAB
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/sync/dropstab")
@@ -57,6 +64,46 @@ async def sync_dropstab_entity(
     
     return {
         'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'entity': entity,
+        **result
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# SYNC ENDPOINTS - CRYPTORANK
+# ═══════════════════════════════════════════════════════════════
+
+@router.post("/sync/cryptorank")
+async def sync_cryptorank_all(sync = Depends(get_cryptorank_sync)):
+    """Run full CryptoRank sync"""
+    result = await sync.sync_all()
+    return result
+
+
+@router.post("/sync/cryptorank/{entity}")
+async def sync_cryptorank_entity(
+    entity: str,
+    sync = Depends(get_cryptorank_sync)
+):
+    """Sync specific entity from CryptoRank"""
+    if entity == 'funding' or entity == 'fundraising':
+        result = await sync.sync_funding()
+    elif entity == 'investors':
+        result = await sync.sync_investors()
+    elif entity == 'unlocks':
+        result = await sync.sync_unlocks()
+    elif entity == 'projects':
+        result = await sync.sync_projects()
+    elif entity == 'launchpads':
+        result = await sync.sync_launchpads()
+    elif entity == 'categories':
+        result = await sync.sync_categories()
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}. Available: funding, investors, unlocks, projects, launchpads, categories")
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'source': 'cryptorank',
         'entity': entity,
         **result
     }
