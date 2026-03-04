@@ -1,9 +1,9 @@
 # FOMO Market Data API - PRD
 
-## Version: 3.0.0 (Updated 2026-03-04)
+## Version: 3.1.0 (Updated 2026-03-04)
 
 ## Original Problem Statement
-Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap для получения real-time и исторических данных.
+Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap.
 
 ## Architecture
 
@@ -18,10 +18,10 @@
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│                    LAYER 2: Unlock API                  │
+│                    LAYER 2: Intel API                   │
 │  Dropstab / CryptoRank                                  │
 │           ↓                                             │
-│  Scraper → MongoDB → API                                │
+│  Scrapers → Parsers → MongoDB → Moderation → API       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -42,15 +42,28 @@
 
 ---
 
-## Layer 2 — Unlock API ✅ COMPLETE
+## Layer 2 — Intel API ✅ COMPLETE
 
 | Компонент | Статус |
 |-----------|--------|
-| Projects DB | ✅ MongoDB |
-| Token Unlocks DB | ✅ MongoDB |
-| Dropstab Scraper | ✅ Done |
-| Projects API | ✅ Done |
-| Unlocks API | ✅ Done |
+| **Investors** | ✅ intel_investors |
+| **Unlocks** | ✅ intel_unlocks |
+| **Fundraising** | ✅ intel_fundraising |
+| **Projects** | ✅ intel_projects |
+| **Activity** | ✅ intel_activity |
+| **Moderation Queue** | ✅ moderation_queue |
+| Dropstab Client | ✅ Done |
+| Parsers | ✅ 5 types |
+| Sync Service | ✅ Done |
+
+### Intel API Endpoints
+- `GET /api/intel/investors` — VCs/Funds
+- `GET /api/intel/unlocks/upcoming` — Token unlocks
+- `GET /api/intel/fundraising/recent` — Funding rounds
+- `GET /api/intel/projects` — Projects
+- `GET /api/intel/activity` — News feed
+- `GET /api/intel/moderation` — Admin queue
+- `POST /api/intel/sync/dropstab` — Trigger sync
 
 ---
 
