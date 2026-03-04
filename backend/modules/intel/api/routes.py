@@ -183,6 +183,48 @@ async def cryptorank_ingest_status():
     }
 
 
+@router.get("/ingest/cryptorank/stats")
+async def cryptorank_stats(sync = Depends(get_cryptorank_sync)):
+    """
+    Get CryptoRank sync statistics.
+    Shows how many records from CryptoRank are in each collection.
+    """
+    return await sync.get_sync_stats()
+
+
+@router.post("/ingest/cryptorank/funding/batch")
+async def ingest_funding_batch(
+    request: Request,
+    sync = Depends(get_cryptorank_sync)
+):
+    """
+    Ingest multiple pages of funding data at once.
+    
+    Body format:
+    {
+        "pages": [
+            {"total": 10851, "data": [...]},
+            {"total": 10851, "data": [...]},
+            ...
+        ]
+    }
+    
+    Useful for incremental sync of multiple pages.
+    """
+    data = await request.json()
+    pages = data.get('pages', [])
+    
+    if not pages:
+        raise HTTPException(status_code=400, detail="No pages provided")
+    
+    result = await sync.ingest_funding_batch(pages)
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'source': 'cryptorank',
+        **result
+    }
+
+
 # ═══════════════════════════════════════════════════════════════
 # INVESTORS
 # ═══════════════════════════════════════════════════════════════
