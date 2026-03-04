@@ -280,6 +280,14 @@ class CryptoRankSync:
         """
         Run full sync of all CryptoRank data types.
         """
+        if not self.is_configured():
+            return {
+                'source': 'cryptorank',
+                'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+                'error': 'CRYPTORANK_API_KEY not configured. Get your key at https://cryptorank.io/public-api',
+                'syncs': {}
+            }
+        
         logger.info("[CryptoRank] Starting full sync...")
         
         results = {
