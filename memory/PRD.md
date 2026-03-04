@@ -1,6 +1,6 @@
 # FOMO Market Data API - PRD
 
-## Version: 3.3.0 (Updated 2026-03-05)
+## Version: 3.4.0 (Updated 2026-03-05)
 
 ## Original Problem Statement
 Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap.
@@ -8,25 +8,23 @@
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    LAYER 1: Exchange API                │
-│  Binance │ Bybit │ Coinbase │ Hyperliquid              │
-│           ↓                                             │
-│  Adapters → Normalizer → Redis → Aggregation → API     │
-│                              ↓                          │
-│                       ClickHouse (Historical)           │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    LAYER 1: Exchange API                    │
+│  Binance │ Bybit │ Coinbase │ Hyperliquid                  │
+│           ↓                                                 │
+│  Adapters → Normalizer → Redis → Aggregation → API         │
+│                              ↓                              │
+│                       ClickHouse (Historical)               │
+└─────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────┐
-│                    LAYER 2: Intel API                   │
-│  Dropstab / CryptoRank                                  │
-│           ↓                                             │
-│  Source Manager → Scraper Engine → Parsers             │
-│           ↓                                             │
-│  Entity Resolver → MongoDB → Moderation → API          │
-│           ↓                                             │
-│  Intel Scheduler (configurable intervals)              │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    LAYER 2: Intel API                       │
+│  Dropstab (scraper) │ CryptoRank (scraper)                 │
+│           ↓                                                 │
+│  JSON → Parser → Entity Resolver → MongoDB → API           │
+│           ↓                                                 │
+│  Moderation Queue → Admin                                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -53,18 +51,19 @@
 | **Scraper Engine** | ✅ BaseScraper + Registry |
 | **Source Manager** | ✅ Priority + Health |
 | **Entity Resolver** | ✅ Canonical entities |
-| **Relationship Builder** | ✅ Entity relations |
+| **Dropstab Source** | ✅ Sync service |
+| **CryptoRank Source** | ✅ Ingest service (scraper) |
 | **Investors** | ✅ intel_investors |
 | **Unlocks** | ✅ intel_unlocks |
 | **Fundraising** | ✅ intel_fundraising |
 | **Projects** | ✅ intel_projects |
 | **Activity** | ✅ intel_activity |
-| **Launchpads** | ✅ intel_launchpads (NEW) |
-| **Categories** | ✅ intel_categories (NEW) |
+| **Launchpads** | ✅ intel_launchpads |
+| **Categories** | ✅ intel_categories |
+| **Market Unlocks** | ✅ market_unlocks |
+| **Market Overview** | ✅ intel_market |
 | **Moderation Queue** | ✅ moderation_queue |
-| **Dropstab Scraper** | ✅ Full implementation |
-| **CryptoRank Scraper** | ✅ Full implementation (requires API key) |
-| **Intel Scheduler** | ✅ Configurable intervals |
+| **Intel Scheduler** | ✅ Dropstab auto-sync |
 
 ### Intel Module Structure
 ```
@@ -73,41 +72,43 @@ modules/intel/
 │   ├── base_scraper.py
 │   ├── registry.py
 │   ├── scheduler.py
-│   ├── intel_scheduler.py  # NEW - Sync scheduler
+│   ├── intel_scheduler.py
 │   └── source_manager.py
 ├── entities/         # Entity normalization
 │   ├── resolver.py
 │   └── relations.py
-├── dropstab/         # Dropstab source
+├── dropstab/         # Dropstab source (auto-sync)
 │   ├── client.py
 │   ├── sync.py
 │   └── parsers/
-├── sources/          # Additional sources
-│   └── cryptorank/   # NEW - CryptoRank integration
+├── sources/          
+│   └── cryptorank/   # CryptoRank source (ingest)
 │       ├── client.py
-│       ├── sync.py
+│       ├── sync.py   # Ingest service
 │       └── parsers/
 └── api/              # REST endpoints
 ```
 
-### Intel API Endpoints
-- `GET /api/intel/stats` — Statistics
-- `GET /api/intel/sources` — Data sources
-- `GET /api/intel/health` — System health
-- `GET /api/intel/entities` — Canonical entities
-- `GET /api/intel/investors` — VCs/Funds
-- `GET /api/intel/unlocks/upcoming` — Token unlocks
-- `GET /api/intel/fundraising/recent` — Funding rounds
-- `GET /api/intel/projects` — Projects
-- `GET /api/intel/launchpads` — Launchpad platforms (NEW)
-- `GET /api/intel/categories` — Crypto categories (NEW)
-- `GET /api/intel/moderation` — Admin queue
-- `POST /api/intel/sync/dropstab` — Trigger Dropstab sync
-- `POST /api/intel/sync/cryptorank` — Trigger CryptoRank sync (NEW)
-- `GET /api/intel/sync/cryptorank/status` — Check CryptoRank API status (NEW)
-- `GET /api/intel/scheduler/status` — Scheduler status (NEW)
-- `POST /api/intel/scheduler/start` — Start scheduler (NEW)
-- `POST /api/intel/scheduler/stop` — Stop scheduler (NEW)
+### CryptoRank Integration (SCRAPER - NO API KEY)
+
+CryptoRank работает как **scraper source**:
+- Данные получаются через browser/manual scraping
+- JSON отправляется через POST endpoints
+- Никакого API ключа не требуется
+
+**Ingest Endpoints:**
+- `POST /api/intel/ingest/cryptorank` — Ingest all data
+- `POST /api/intel/ingest/cryptorank/{entity}` — Ingest specific entity
+
+**Supported Entities:**
+- `funding` — Funding rounds
+- `investors` — Top investors  
+- `unlocks` — Token unlocks (vesting)
+- `tge_unlocks` — TGE unlocks
+- `unlock_totals` — Market-wide unlock totals
+- `launchpads` — IDO/IEO/ICO platforms
+- `categories` — Crypto sectors
+- `market` — Market overview
 
 ---
 
