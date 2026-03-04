@@ -164,6 +164,14 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    # Stop Intel Scheduler
+    from modules.intel.engine import stop_intel_scheduler
+    try:
+        await stop_intel_scheduler()
+        logger.info("Intel Scheduler stopped")
+    except Exception:
+        pass
+    
     # Stop Candle Ingestor
     from modules.market_data.services import candle_ingestor
     try:
