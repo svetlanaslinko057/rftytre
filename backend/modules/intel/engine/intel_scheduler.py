@@ -108,22 +108,12 @@ class IntelSyncScheduler:
             logger.info(f"[IntelScheduler] Scheduled {name} every {interval // 3600}h")
     
     async def _start_cryptorank_tasks(self):
-        """Start CryptoRank sync tasks"""
-        cryptorank = self._get_cryptorank_sync()
-        
-        sync_jobs = [
-            ('cryptorank_unlocks', cryptorank.sync_unlocks, self.INTERVALS['cryptorank_unlocks']),
-            ('cryptorank_funding', cryptorank.sync_funding, self.INTERVALS['cryptorank_funding']),
-            ('cryptorank_investors', cryptorank.sync_investors, self.INTERVALS['cryptorank_investors']),
-            ('cryptorank_projects', cryptorank.sync_projects, self.INTERVALS['cryptorank_projects']),
-            ('cryptorank_launchpads', cryptorank.sync_launchpads, self.INTERVALS['cryptorank_launchpads']),
-            ('cryptorank_categories', cryptorank.sync_categories, self.INTERVALS['cryptorank_categories']),
-        ]
-        
-        for name, sync_func, interval in sync_jobs:
-            task = asyncio.create_task(self._run_loop(name, sync_func, interval))
-            self._tasks[name] = task
-            logger.info(f"[IntelScheduler] Scheduled {name} every {interval // 3600}h")
+        """
+        CryptoRank is a scraper source - no automatic sync.
+        Data must be ingested via POST /api/intel/ingest/cryptorank/{entity}
+        """
+        logger.info("[IntelScheduler] CryptoRank is a scraper source - no automatic sync scheduled")
+        logger.info("[IntelScheduler] Use POST /api/intel/ingest/cryptorank/{entity} to ingest data")
     
     async def _run_loop(self, name: str, sync_func, interval: int):
         """Run sync function in a loop with interval"""
