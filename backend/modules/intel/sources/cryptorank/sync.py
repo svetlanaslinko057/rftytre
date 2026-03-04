@@ -183,6 +183,9 @@ class CryptoRankSync:
         """
         Sync projects/coins.
         """
+        if not self.is_configured():
+            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
+        
         logger.info("[CryptoRank] Syncing projects...")
         
         all_docs = []
