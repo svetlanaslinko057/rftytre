@@ -70,57 +70,26 @@ async def sync_dropstab_entity(
 
 
 # ═══════════════════════════════════════════════════════════════
-# SYNC ENDPOINTS - CRYPTORANK
+# CRYPTORANK STATUS
 # ═══════════════════════════════════════════════════════════════
-
-@router.post("/sync/cryptorank")
-async def sync_cryptorank_all(sync = Depends(get_cryptorank_sync)):
-    """Run full CryptoRank sync"""
-    result = await sync.sync_all()
-    return result
-
-
-@router.post("/sync/cryptorank/{entity}")
-async def sync_cryptorank_entity(
-    entity: str,
-    sync = Depends(get_cryptorank_sync)
-):
-    """Sync specific entity from CryptoRank"""
-    if entity == 'funding' or entity == 'fundraising':
-        result = await sync.sync_funding()
-    elif entity == 'investors':
-        result = await sync.sync_investors()
-    elif entity == 'unlocks':
-        result = await sync.sync_unlocks()
-    elif entity == 'unlock_totals':
-        result = await sync.sync_unlock_totals()
-    elif entity == 'launchpads':
-        result = await sync.sync_launchpads()
-    elif entity == 'categories':
-        result = await sync.sync_categories()
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}. Available: funding, investors, unlocks, unlock_totals, launchpads, categories")
-    
-    return {
-        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
-        'source': 'cryptorank',
-        'entity': entity,
-        **result
-    }
-
 
 @router.get("/sync/cryptorank/status")
 async def cryptorank_status():
     """
     Check CryptoRank scraper status.
-    CryptoRank uses public frontend endpoints - no API key required.
+    CryptoRank is a scraper source - POST JSON data to /ingest/cryptorank/{entity}
     """
     return {
         'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
         'source': 'cryptorank',
         'type': 'scraper',
-        'configured': True,
-        'message': 'CryptoRank scraper ready (uses public endpoints, no API key required)'
+        'ready': True,
+        'message': 'CryptoRank is a scraper source. Use POST /api/intel/ingest/cryptorank/{entity} to ingest data.',
+        'endpoints': {
+            'ingest_all': 'POST /api/intel/ingest/cryptorank',
+            'ingest_entity': 'POST /api/intel/ingest/cryptorank/{entity}',
+            'status': 'GET /api/intel/ingest/cryptorank/status'
+        }
     }
 
 
