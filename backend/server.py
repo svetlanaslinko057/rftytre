@@ -61,12 +61,13 @@ async def root():
             "market": "/api/market/*",
             "assets": "/api/assets/*",
             "exchange": "/api/exchange/*",
-            "whales": "/api/whales/*"
+            "whales": "/api/whales/*",
+            "unlocks": "/api/unlocks/*"
         }
     }
 
 # ═══════════════════════════════════════════════════════════════
-# REGISTER MARKET DATA MODULE
+# REGISTER MARKET DATA MODULE (Layer 1)
 # ═══════════════════════════════════════════════════════════════
 
 from modules.market_data import (
@@ -87,6 +88,13 @@ app.include_router(whales_router)
 app.include_router(derivatives_router)
 app.include_router(redis_router)
 app.include_router(candles_router)
+
+# ═══════════════════════════════════════════════════════════════
+# REGISTER UNLOCKS MODULE (Layer 2)
+# ═══════════════════════════════════════════════════════════════
+
+from modules.unlocks import unlocks_router
+app.include_router(unlocks_router)
 
 # ═══════════════════════════════════════════════════════════════
 # CORS & MIDDLEWARE
