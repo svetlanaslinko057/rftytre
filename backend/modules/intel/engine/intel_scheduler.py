@@ -71,7 +71,7 @@ class IntelSyncScheduler:
         
         Args:
             enable_dropstab: Enable Dropstab sync jobs
-            enable_cryptorank: Enable CryptoRank sync jobs (requires API key)
+            enable_cryptorank: Enable CryptoRank sync jobs
         """
         if self._running:
             logger.warning("[IntelScheduler] Already running")
@@ -84,13 +84,9 @@ class IntelSyncScheduler:
         if enable_dropstab:
             await self._start_dropstab_tasks()
         
-        # Start CryptoRank sync tasks (only if API key configured)
+        # Start CryptoRank sync tasks (scraper - no API key needed)
         if enable_cryptorank:
-            cryptorank = self._get_cryptorank_sync()
-            if cryptorank.is_configured():
-                await self._start_cryptorank_tasks()
-            else:
-                logger.warning("[IntelScheduler] CryptoRank API key not configured, skipping CryptoRank sync tasks")
+            await self._start_cryptorank_tasks()
         
         logger.info(f"[IntelScheduler] Started {len(self._tasks)} sync tasks")
     
