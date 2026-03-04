@@ -92,14 +92,14 @@ async def sync_cryptorank_entity(
         result = await sync.sync_investors()
     elif entity == 'unlocks':
         result = await sync.sync_unlocks()
-    elif entity == 'projects':
-        result = await sync.sync_projects()
+    elif entity == 'unlock_totals':
+        result = await sync.sync_unlock_totals()
     elif entity == 'launchpads':
         result = await sync.sync_launchpads()
     elif entity == 'categories':
         result = await sync.sync_categories()
     else:
-        raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}. Available: funding, investors, unlocks, projects, launchpads, categories")
+        raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}. Available: funding, investors, unlocks, unlock_totals, launchpads, categories")
     
     return {
         'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
