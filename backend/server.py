@@ -130,6 +130,7 @@ async def startup():
     logger.info("  - /api/derivatives/* (funding, open-interest, liquidations, long-short)")
     logger.info("  - /api/whales/* (snapshots, leaderboard)")
     logger.info("  - /api/candles/* (historical OHLCV from ClickHouse)")
+    logger.info("  - /api/intel/* (crypto intelligence data)")
     
     # Sync instruments on startup
     from modules.market_data.services import instrument_registry
@@ -155,6 +156,11 @@ async def startup():
         logger.info("Candle Ingestor started")
     except Exception as e:
         logger.warning(f"Failed to start Candle Ingestor: {e}")
+    
+    # Start Intel Sync Scheduler (Layer 2)
+    # Note: Scheduler is disabled by default to avoid unnecessary API calls
+    # Enable via POST /api/intel/scheduler/start
+    logger.info("Intel Scheduler available - start via POST /api/intel/scheduler/start")
 
 @app.on_event("shutdown")
 async def shutdown():
