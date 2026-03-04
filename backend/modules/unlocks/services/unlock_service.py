@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import uuid
 
-from .domain import Project, TokenUnlock, UnlockCategory, UnlockSummary
+from ..domain import Project, TokenUnlock, UnlockCategory, UnlockSummary
 
 logger = logging.getLogger(__name__)
 
