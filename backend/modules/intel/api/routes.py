@@ -628,3 +628,52 @@ async def get_scraper_health(db = Depends(get_db)):
         'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
         'scrapers': items
     }
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# SCHEDULER
+# ═══════════════════════════════════════════════════════════════
+
+def get_scheduler():
+    """Get scheduler instance"""
+    from server import db
+    from ..engine.intel_scheduler import get_intel_scheduler
+    return get_intel_scheduler(db)
+
+
+@router.get("/scheduler/status")
+async def scheduler_status():
+    """Get scheduler status"""
+    scheduler = get_scheduler()
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        **scheduler.status()
+    }
+
+
+@router.post("/scheduler/start")
+async def start_scheduler(
+    enable_dropstab: bool = Query(True),
+    enable_cryptorank: bool = Query(True)
+):
+    """Start the Intel sync scheduler"""
+    scheduler = get_scheduler()
+    await scheduler.start(enable_dropstab, enable_cryptorank)
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'ok': True,
+        **scheduler.status()
+    }
+
+
+@router.post("/scheduler/stop")
+async def stop_scheduler():
+    """Stop the Intel sync scheduler"""
+    scheduler = get_scheduler()
+    await scheduler.stop()
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'ok': True,
+        **scheduler.status()
+    }
