@@ -1,6 +1,6 @@
 # FOMO Market Data API - PRD
 
-## Version: 2.2.1 (Deployed 2026-03-04)
+## Version: 2.3.0 (Updated 2026-03-04)
 
 ## Original Problem Statement
 Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap для получения real-time и исторических данных из Binance / Bybit / Coinbase / Hyperliquid.
@@ -8,6 +8,10 @@
 ## Architecture Principle
 ```
 Provider → Raw Data → Normalizer → Redis Store → Aggregation → API
+                                        ↓
+                              ClickHouse (Historical)
+                                        ↓
+                                  TA Engine
 ```
 
 **Мы забираем ВСЁ, что отдают провайдеры. Не выбирать. Не оптимизировать. Не фильтровать.**
@@ -23,8 +27,9 @@ Provider → Raw Data → Normalizer → Redis Store → Aggregation → API
 | 3 | Data Normalization | ✅ Done |
 | 4 | Aggregation Engine v2 | ✅ Done |
 | 5 | Redis Cache | ✅ Done |
-| 6 | WebSocket Gateway | ⏳ Next |
-| 7 | Market API | ✅ Done |
+| 6 | WebSocket Gateway | ⏳ P1 |
+| 7 | **Historical Candle Storage** | ✅ Done |
+| 8 | Market API | ✅ Done |
 
 ---
 
