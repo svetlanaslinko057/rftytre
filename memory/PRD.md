@@ -1,6 +1,6 @@
 # FOMO Market Data API - PRD
 
-## Version: 3.2.0 (Updated 2026-03-04)
+## Version: 3.3.0 (Updated 2026-03-05)
 
 ## Original Problem Statement
 Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap.
@@ -24,6 +24,8 @@
 │  Source Manager → Scraper Engine → Parsers             │
 │           ↓                                             │
 │  Entity Resolver → MongoDB → Moderation → API          │
+│           ↓                                             │
+│  Intel Scheduler (configurable intervals)              │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +59,12 @@
 | **Fundraising** | ✅ intel_fundraising |
 | **Projects** | ✅ intel_projects |
 | **Activity** | ✅ intel_activity |
+| **Launchpads** | ✅ intel_launchpads (NEW) |
+| **Categories** | ✅ intel_categories (NEW) |
 | **Moderation Queue** | ✅ moderation_queue |
+| **Dropstab Scraper** | ✅ Full implementation |
+| **CryptoRank Scraper** | ✅ Full implementation (requires API key) |
+| **Intel Scheduler** | ✅ Configurable intervals |
 
 ### Intel Module Structure
 ```
@@ -66,6 +73,7 @@ modules/intel/
 │   ├── base_scraper.py
 │   ├── registry.py
 │   ├── scheduler.py
+│   ├── intel_scheduler.py  # NEW - Sync scheduler
 │   └── source_manager.py
 ├── entities/         # Entity normalization
 │   ├── resolver.py
@@ -74,6 +82,11 @@ modules/intel/
 │   ├── client.py
 │   ├── sync.py
 │   └── parsers/
+├── sources/          # Additional sources
+│   └── cryptorank/   # NEW - CryptoRank integration
+│       ├── client.py
+│       ├── sync.py
+│       └── parsers/
 └── api/              # REST endpoints
 ```
 
@@ -86,8 +99,15 @@ modules/intel/
 - `GET /api/intel/unlocks/upcoming` — Token unlocks
 - `GET /api/intel/fundraising/recent` — Funding rounds
 - `GET /api/intel/projects` — Projects
+- `GET /api/intel/launchpads` — Launchpad platforms (NEW)
+- `GET /api/intel/categories` — Crypto categories (NEW)
 - `GET /api/intel/moderation` — Admin queue
-- `POST /api/intel/sync/dropstab` — Trigger sync
+- `POST /api/intel/sync/dropstab` — Trigger Dropstab sync
+- `POST /api/intel/sync/cryptorank` — Trigger CryptoRank sync (NEW)
+- `GET /api/intel/sync/cryptorank/status` — Check CryptoRank API status (NEW)
+- `GET /api/intel/scheduler/status` — Scheduler status (NEW)
+- `POST /api/intel/scheduler/start` — Start scheduler (NEW)
+- `POST /api/intel/scheduler/stop` — Stop scheduler (NEW)
 
 ---
 
