@@ -1,6 +1,6 @@
 # FOMO Market Data API - PRD
 
-## Version: 2.2.0
+## Version: 2.2.1 (Deployed 2026-03-04)
 
 ## Original Problem Statement
 Создать FOMO Market Data API - Unified Exchange Data Backend уровня CoinGecko/CoinMarketCap для получения real-time и исторических данных из Binance / Bybit / Coinbase / Hyperliquid.
