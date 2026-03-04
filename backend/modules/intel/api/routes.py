@@ -99,7 +99,7 @@ async def cryptorank_status():
 
 @router.post("/ingest/cryptorank")
 async def ingest_cryptorank_all(
-    data: Dict[str, Any],
+    request: Request,
     sync = Depends(get_cryptorank_sync)
 ):
     """
@@ -117,6 +117,7 @@ async def ingest_cryptorank_all(
         "market": {...}
     }
     """
+    data = await request.json()
     result = await sync.ingest_all(data)
     return result
 
@@ -124,7 +125,7 @@ async def ingest_cryptorank_all(
 @router.post("/ingest/cryptorank/{entity}")
 async def ingest_cryptorank_entity(
     entity: str,
-    data: Any,
+    request: Request,
     sync = Depends(get_cryptorank_sync)
 ):
     """
@@ -132,6 +133,8 @@ async def ingest_cryptorank_entity(
     
     POST JSON data for the entity type.
     """
+    data = await request.json()
+    
     if entity == 'funding' or entity == 'fundraising':
         result = await sync.ingest_funding(data)
     elif entity == 'investors':
