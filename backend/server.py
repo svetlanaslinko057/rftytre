@@ -97,6 +97,13 @@ from modules.unlocks import unlocks_router
 app.include_router(unlocks_router)
 
 # ═══════════════════════════════════════════════════════════════
+# REGISTER INTEL MODULE (Layer 2 - Crypto Intelligence)
+# ═══════════════════════════════════════════════════════════════
+
+from modules.intel import intel_router
+app.include_router(intel_router)
+
+# ═══════════════════════════════════════════════════════════════
 # CORS & MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════
 
