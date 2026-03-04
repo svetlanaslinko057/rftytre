@@ -374,3 +374,140 @@ async def intel_stats(db = Depends(get_db)):
         },
         'moderation_pending': await db.moderation_queue.count_documents({'status': 'pending'})
     }
+
+
+
+# ═══════════════════════════════════════════════════════════════
+# ENTITIES
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/entities")
+async def list_entities(
+    entity_type: Optional[str] = Query(None, alias='type'),
+    search: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db = Depends(get_db)
+):
+    """List canonical entities"""
+    query = {}
+    if entity_type:
+        query['type'] = entity_type
+    if search:
+        query['$or'] = [
+            {'symbol': {'$regex': search, '$options': 'i'}},
+            {'name': {'$regex': search, '$options': 'i'}},
+            {'aliases': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    cursor = db.entities.find(query, {'_id': 0})
+    items = await cursor.limit(limit).to_list(limit)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'count': len(items),
+        'items': items
+    }
+
+
+@router.get("/entities/{entity_id}/relations")
+async def get_entity_relations(
+    entity_id: str,
+    relation_type: Optional[str] = Query(None, alias='type'),
+    db = Depends(get_db)
+):
+    """Get relations for an entity"""
+    query = {
+        '$or': [
+            {'from_entity': entity_id},
+            {'to_entity': entity_id}
+        ]
+    }
+    if relation_type:
+        query['type'] = relation_type
+    
+    cursor = db.entity_relations.find(query, {'_id': 0})
+    items = await cursor.to_list(100)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'entity_id': entity_id,
+        'count': len(items),
+        'relations': items
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# DATA SOURCES & HEALTH
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/sources")
+async def list_sources(
+    status: Optional[str] = Query(None),
+    db = Depends(get_db)
+):
+    """List all data sources"""
+    query = {}
+    if status:
+        query['status'] = status
+    
+    cursor = db.data_sources.find(query, {'_id': 0})
+    sources = await cursor.sort('priority', 1).to_list(100)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'count': len(sources),
+        'sources': sources
+    }
+
+
+@router.post("/sources/{name}/status")
+async def set_source_status(
+    name: str,
+    status: str = Query(..., description="active, paused, disabled"),
+    db = Depends(get_db)
+):
+    """Set source status"""
+    result = await db.data_sources.update_one(
+        {'name': name},
+        {'$set': {'status': status, 'updated_at': datetime.now(timezone.utc)}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Source not found")
+    
+    return {'ok': True, 'source': name, 'status': status}
+
+
+@router.get("/health")
+async def get_system_health(db = Depends(get_db)):
+    """Get overall system health"""
+    # Scraper health
+    scraper_health = await db.scraper_health.find({}, {'_id': 0}).to_list(100)
+    
+    # Source health
+    source_health = await db.data_source_health.find({}, {'_id': 0}).to_list(100)
+    
+    # Recent errors
+    recent_errors = await db.scraper_errors.find(
+        {},
+        {'_id': 0}
+    ).sort('timestamp', -1).limit(10).to_list(10)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'scrapers': scraper_health,
+        'sources': source_health,
+        'recent_errors': recent_errors
+    }
+
+
+@router.get("/health/scrapers")
+async def get_scraper_health(db = Depends(get_db)):
+    """Get scraper health status"""
+    cursor = db.scraper_health.find({}, {'_id': 0})
+    items = await cursor.to_list(100)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'scrapers': items
+    }
