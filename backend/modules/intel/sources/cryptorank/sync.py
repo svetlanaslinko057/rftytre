@@ -32,16 +32,25 @@ class CryptoRankSync:
     - Parses and normalizes
     - Upserts to MongoDB
     - Pushes changes to moderation queue
+    
+    Requires CRYPTORANK_API_KEY environment variable.
     """
     
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.client = cryptorank_client
     
+    def is_configured(self) -> bool:
+        """Check if CryptoRank API is configured"""
+        return self.client.is_configured()
+    
     async def sync_funding(self, max_pages: int = 5) -> Dict[str, Any]:
         """
         Sync funding rounds with pagination.
         """
+        if not self.is_configured():
+            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
+        
         logger.info("[CryptoRank] Syncing funding rounds...")
         
         all_docs = []
