@@ -404,6 +404,59 @@ async def reject_moderation(
 
 
 # ═══════════════════════════════════════════════════════════════
+# LAUNCHPADS
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/launchpads")
+async def list_launchpads(
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    db = Depends(get_db)
+):
+    """List launchpad platforms"""
+    query = {}
+    if search:
+        query['$or'] = [
+            {'name': {'$regex': search, '$options': 'i'}},
+            {'slug': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    cursor = db.intel_launchpads.find(query, {'_id': 0, 'raw': 0})
+    items = await cursor.sort('projects_count', -1).limit(limit).to_list(limit)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'count': len(items),
+        'items': items
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORIES
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/categories")
+async def list_categories(
+    search: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    db = Depends(get_db)
+):
+    """List crypto categories"""
+    query = {}
+    if search:
+        query['name'] = {'$regex': search, '$options': 'i'}
+    
+    cursor = db.intel_categories.find(query, {'_id': 0, 'raw': 0})
+    items = await cursor.sort('coins_count', -1).limit(limit).to_list(limit)
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'count': len(items),
+        'items': items
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 # STATS
 # ═══════════════════════════════════════════════════════════════
 
@@ -418,6 +471,8 @@ async def intel_stats(db = Depends(get_db)):
             'fundraising': await db.intel_fundraising.count_documents({}),
             'projects': await db.intel_projects.count_documents({}),
             'activity': await db.intel_activity.count_documents({}),
+            'launchpads': await db.intel_launchpads.count_documents({}),
+            'categories': await db.intel_categories.count_documents({}),
         },
         'moderation_pending': await db.moderation_queue.count_documents({'status': 'pending'})
     }
