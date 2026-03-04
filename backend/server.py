@@ -75,7 +75,8 @@ from modules.market_data import (
     assets_router,
     whales_router,
     derivatives_router,
-    redis_router
+    redis_router,
+    candles_router
 )
 
 # Register routers
@@ -85,6 +86,7 @@ app.include_router(assets_router)
 app.include_router(whales_router)
 app.include_router(derivatives_router)
 app.include_router(redis_router)
+app.include_router(candles_router)
 
 # ═══════════════════════════════════════════════════════════════
 # CORS & MIDDLEWARE
