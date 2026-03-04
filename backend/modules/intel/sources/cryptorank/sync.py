@@ -93,8 +93,11 @@ class CryptoRankSync:
     
     async def sync_investors(self, max_pages: int = 3) -> Dict[str, Any]:
         """
-        Sync top investors list.
+        Sync investors/funds list.
         """
+        if not self.is_configured():
+            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
+        
         logger.info("[CryptoRank] Syncing investors...")
         
         all_docs = []
@@ -102,7 +105,7 @@ class CryptoRankSync:
         limit = 100
         
         for page in range(max_pages):
-            response = await self.client.top_investors(limit=limit, offset=offset)
+            response = await self.client.investors(limit=limit, offset=offset)
             data = response.get('data', [])
             
             if not data:
