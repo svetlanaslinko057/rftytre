@@ -183,6 +183,8 @@ class UnlockService:
             unlock_date = u['unlock_date']
             if isinstance(unlock_date, str):
                 unlock_date = datetime.fromisoformat(unlock_date.replace('Z', '+00:00'))
+            if unlock_date.tzinfo is None:
+                unlock_date = unlock_date.replace(tzinfo=timezone.utc)
             u['days_until'] = (unlock_date - now).days
         
         return unlocks
