@@ -3,7 +3,7 @@ Intel API Routes
 Endpoints for crypto intelligence data
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import logging
