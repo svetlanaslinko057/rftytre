@@ -1,13 +1,10 @@
 """
 CryptoRank Sync Service
-Handles syncing all data types and pushing to moderation queue
-
-NOTE: Requires CRYPTORANK_API_KEY environment variable.
-Get your key at: https://cryptorank.io/public-api
+Scrapes data from CryptoRank frontend API (no API key required)
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -16,7 +13,7 @@ from .parsers import (
     parse_funding,
     parse_top_investors,
     parse_unlocks,
-    parse_projects,
+    parse_tge_unlocks,
     parse_launchpads,
     parse_categories
 )
@@ -27,35 +24,23 @@ logger = logging.getLogger(__name__)
 
 class CryptoRankSync:
     """
-    Sync service for all CryptoRank data.
-    - Fetches from API with pagination
-    - Parses and normalizes
-    - Upserts to MongoDB
-    - Pushes changes to moderation queue
-    
-    Requires CRYPTORANK_API_KEY environment variable.
+    Sync service for CryptoRank data.
+    Uses public frontend endpoints - no API key needed.
     """
     
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.client = cryptorank_client
     
-    def is_configured(self) -> bool:
-        """Check if CryptoRank API is configured"""
-        return self.client.is_configured()
-    
     async def sync_funding(self, max_pages: int = 5) -> Dict[str, Any]:
         """
         Sync funding rounds with pagination.
         """
-        if not self.is_configured():
-            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
-        
         logger.info("[CryptoRank] Syncing funding rounds...")
         
         all_docs = []
         offset = 0
-        limit = 100
+        limit = 50
         
         for page in range(max_pages):
             response = await self.client.funding(limit=limit, offset=offset)
@@ -70,9 +55,9 @@ class CryptoRankSync:
             offset += limit
             total = response.get('total', 0)
             
-            logger.debug(f"[CryptoRank] Funding page {page + 1}: {len(data)} items, total: {total}")
+            logger.debug(f"[CryptoRank] Funding page {page + 1}: {len(data)} items")
             
-            if offset >= total:
+            if offset >= total or total == 0:
                 break
         
         # Upsert to MongoDB
@@ -91,40 +76,20 @@ class CryptoRankSync:
         logger.info(f"[CryptoRank] Funding: {len(all_docs)} total, {changed} changed")
         return {'total': len(all_docs), 'changed': changed}
     
-    async def sync_investors(self, max_pages: int = 3) -> Dict[str, Any]:
+    async def sync_investors(self) -> Dict[str, Any]:
         """
-        Sync investors/funds list.
+        Sync top investors list.
         """
-        if not self.is_configured():
-            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
-        
         logger.info("[CryptoRank] Syncing investors...")
         
-        all_docs = []
-        offset = 0
-        limit = 100
-        
-        for page in range(max_pages):
-            response = await self.client.investors(limit=limit, offset=offset)
-            data = response.get('data', [])
-            
-            if not data:
-                break
-            
-            docs = parse_top_investors(data)
-            all_docs.extend(docs)
-            
-            offset += limit
-            total = response.get('total', 0)
-            
-            if offset >= total:
-                break
+        data = await self.client.top_investors(limit=100)
+        docs = parse_top_investors(data)
         
         # Upsert to MongoDB
         collection = self.db.intel_investors
         changed = 0
         
-        for doc in all_docs:
+        for doc in docs:
             result = await upsert_with_diff(collection, doc)
             if result['changed'] and result['change_type']:
                 changed += 1
@@ -133,35 +98,48 @@ class CryptoRankSync:
                     doc['key'], doc, result['change_type']
                 )
         
-        logger.info(f"[CryptoRank] Investors: {len(all_docs)} total, {changed} changed")
-        return {'total': len(all_docs), 'changed': changed}
+        logger.info(f"[CryptoRank] Investors: {len(docs)} total, {changed} changed")
+        return {'total': len(docs), 'changed': changed}
     
-    async def sync_unlocks(self, periods: list = None) -> Dict[str, Any]:
+    async def sync_unlocks(self, max_pages: int = 3) -> Dict[str, Any]:
         """
-        Sync token unlocks for multiple periods.
+        Sync token unlocks (vesting + TGE).
         """
-        if not self.is_configured():
-            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
-        
         logger.info("[CryptoRank] Syncing token unlocks...")
-        
-        if periods is None:
-            periods = ['1w', '2w', '1m', '3m']
         
         all_docs = []
         seen_keys = set()
         
-        for period in periods:
-            response = await self.client.unlocks(limit=100, period=period)
+        # Fetch vesting unlocks
+        offset = 0
+        limit = 50
+        
+        for page in range(max_pages):
+            response = await self.client.unlocks(limit=limit, offset=offset)
             data = response.get('data', [])
+            
+            if not data:
+                break
             
             docs = parse_unlocks(data)
             
-            # Dedupe across periods
             for doc in docs:
                 if doc['key'] not in seen_keys:
                     all_docs.append(doc)
                     seen_keys.add(doc['key'])
+            
+            offset += limit
+            logger.debug(f"[CryptoRank] Unlocks page {page + 1}: {len(data)} items")
+        
+        # Also fetch TGE unlocks
+        tge_response = await self.client.unlock_tge(limit=50)
+        tge_data = tge_response.get('data', [])
+        tge_docs = parse_tge_unlocks(tge_data)
+        
+        for doc in tge_docs:
+            if doc['key'] not in seen_keys:
+                all_docs.append(doc)
+                seen_keys.add(doc['key'])
         
         # Upsert to MongoDB
         collection = self.db.intel_unlocks
@@ -179,72 +157,54 @@ class CryptoRankSync:
         logger.info(f"[CryptoRank] Unlocks: {len(all_docs)} total, {changed} changed")
         return {'total': len(all_docs), 'changed': changed}
     
-    async def sync_projects(self, max_pages: int = 5) -> Dict[str, Any]:
+    async def sync_unlock_totals(self) -> Dict[str, Any]:
         """
-        Sync projects/coins.
+        Sync market-wide unlock totals (for sell pressure analysis).
         """
-        if not self.is_configured():
-            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
+        logger.info("[CryptoRank] Syncing unlock totals...")
         
-        logger.info("[CryptoRank] Syncing projects...")
+        data = await self.client.unlock_totals()
         
-        all_docs = []
-        offset = 0
-        limit = 100
-        
-        for page in range(max_pages):
-            response = await self.client.coins(limit=limit, offset=offset)
-            data = response.get('data', [])
-            
-            if not data:
-                break
-            
-            docs = parse_projects(data)
-            all_docs.extend(docs)
-            
-            offset += limit
-            total = response.get('total', 0)
-            
-            if offset >= total:
-                break
-        
-        # Upsert to MongoDB
-        collection = self.db.intel_projects
+        # Store in separate collection for market metrics
+        collection = self.db.market_unlocks
         changed = 0
         
-        for doc in all_docs:
+        for item in data:
+            date = item.get('timePoint')
+            unlock_usd = item.get('usdUnlock', 0)
+            
+            if not date:
+                continue
+            
+            doc = {
+                'key': f"cryptorank:market_unlock:{date}",
+                'date': date,
+                'unlock_usd': unlock_usd,
+                'source': 'cryptorank'
+            }
+            
             result = await upsert_with_diff(collection, doc)
-            if result['changed'] and result['change_type']:
+            if result['changed']:
                 changed += 1
-                await push_to_moderation(
-                    self.db, 'cryptorank', 'project',
-                    doc['key'], doc, result['change_type']
-                )
         
-        logger.info(f"[CryptoRank] Projects: {len(all_docs)} total, {changed} changed")
-        return {'total': len(all_docs), 'changed': changed}
+        logger.info(f"[CryptoRank] Unlock totals: {len(data)} total, {changed} changed")
+        return {'total': len(data), 'changed': changed}
     
     async def sync_launchpads(self) -> Dict[str, Any]:
         """
-        Sync launchpads.
+        Sync launchpad platforms.
         """
-        if not self.is_configured():
-            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
-        
         logger.info("[CryptoRank] Syncing launchpads...")
         
-        response = await self.client.launchpads(limit=100)
-        data = response.get('data', [])
-        
+        data = await self.client.launchpads(limit=200)
         docs = parse_launchpads(data)
         
-        # Store in intel_launchpads collection
         collection = self.db.intel_launchpads
         changed = 0
         
         for doc in docs:
             result = await upsert_with_diff(collection, doc)
-            if result['changed'] and result['change_type']:
+            if result['changed']:
                 changed += 1
         
         logger.info(f"[CryptoRank] Launchpads: {len(docs)} total, {changed} changed")
@@ -252,25 +212,19 @@ class CryptoRankSync:
     
     async def sync_categories(self) -> Dict[str, Any]:
         """
-        Sync categories.
+        Sync crypto categories/sectors.
         """
-        if not self.is_configured():
-            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
-        
         logger.info("[CryptoRank] Syncing categories...")
         
-        response = await self.client.categories(limit=200)
-        data = response.get('data', [])
-        
+        data = await self.client.categories()
         docs = parse_categories(data)
         
-        # Store in intel_categories collection
         collection = self.db.intel_categories
         changed = 0
         
         for doc in docs:
             result = await upsert_with_diff(collection, doc)
-            if result['changed'] and result['change_type']:
+            if result['changed']:
                 changed += 1
         
         logger.info(f"[CryptoRank] Categories: {len(docs)} total, {changed} changed")
@@ -280,14 +234,6 @@ class CryptoRankSync:
         """
         Run full sync of all CryptoRank data types.
         """
-        if not self.is_configured():
-            return {
-                'source': 'cryptorank',
-                'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
-                'error': 'CRYPTORANK_API_KEY not configured. Get your key at https://cryptorank.io/public-api',
-                'syncs': {}
-            }
-        
         logger.info("[CryptoRank] Starting full sync...")
         
         results = {
@@ -296,12 +242,11 @@ class CryptoRankSync:
             'syncs': {}
         }
         
-        # Sync each type with error handling
         sync_tasks = [
             ('funding', self.sync_funding),
             ('investors', self.sync_investors),
             ('unlocks', self.sync_unlocks),
-            ('projects', self.sync_projects),
+            ('unlock_totals', self.sync_unlock_totals),
             ('launchpads', self.sync_launchpads),
             ('categories', self.sync_categories),
         ]
@@ -313,5 +258,5 @@ class CryptoRankSync:
                 logger.error(f"[CryptoRank] {name} sync failed: {e}")
                 results['syncs'][name] = {'error': str(e)}
         
-        logger.info(f"[CryptoRank] Full sync complete: {results['syncs']}")
+        logger.info(f"[CryptoRank] Full sync complete")
         return results
