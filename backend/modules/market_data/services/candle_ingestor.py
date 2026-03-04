@@ -304,7 +304,7 @@ class CandleIngestor:
             # Filter new candles
             rows = []
             for c in candles:
-                ts = c.ts / 1000 if c.ts > 1e10 else c.ts
+                ts = c.t / 1000 if c.t > 1e10 else c.t
                 candle_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
                 
                 if candle_dt > latest_ts.replace(tzinfo=timezone.utc):
@@ -313,11 +313,11 @@ class CandleIngestor:
                         'symbol': instrument_id,
                         'tf': tf,
                         'ts': ts,
-                        'open': c.open,
-                        'high': c.high,
-                        'low': c.low,
-                        'close': c.close,
-                        'volume': c.volume
+                        'open': c.o,
+                        'high': c.h,
+                        'low': c.l,
+                        'close': c.c,
+                        'volume': c.v
                     })
             
             if rows:
