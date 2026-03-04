@@ -293,8 +293,8 @@ class CandleIngestor:
             
             # Fetch recent candles
             candles = await provider.get_candles(
-                symbol=symbol,
-                interval=tf,
+                native_symbol=symbol,
+                granularity=tf,
                 limit=10  # Just recent ones
             )
             
