@@ -140,6 +140,9 @@ class CryptoRankSync:
         """
         Sync token unlocks for multiple periods.
         """
+        if not self.is_configured():
+            return {'error': 'CRYPTORANK_API_KEY not configured', 'total': 0, 'changed': 0}
+        
         logger.info("[CryptoRank] Syncing token unlocks...")
         
         if periods is None:
@@ -149,7 +152,7 @@ class CryptoRankSync:
         seen_keys = set()
         
         for period in periods:
-            response = await self.client.unlock_feed(limit=100, period=period)
+            response = await self.client.unlocks(limit=100, period=period)
             data = response.get('data', [])
             
             docs = parse_unlocks(data)
@@ -159,18 +162,6 @@ class CryptoRankSync:
                 if doc['key'] not in seen_keys:
                     all_docs.append(doc)
                     seen_keys.add(doc['key'])
-            
-            logger.debug(f"[CryptoRank] Unlocks period {period}: {len(data)} items")
-        
-        # Also fetch TGE unlocks
-        tge_response = await self.client.unlock_tge(limit=50)
-        tge_data = tge_response.get('data', [])
-        tge_docs = parse_tge_unlocks(tge_data)
-        
-        for doc in tge_docs:
-            if doc['key'] not in seen_keys:
-                all_docs.append(doc)
-                seen_keys.add(doc['key'])
         
         # Upsert to MongoDB
         collection = self.db.intel_unlocks
