@@ -114,6 +114,7 @@ async def startup():
     logger.info("  - /api/exchange/* (instruments, ticker, orderbook, trades, candles)")
     logger.info("  - /api/derivatives/* (funding, open-interest, liquidations, long-short)")
     logger.info("  - /api/whales/* (snapshots, leaderboard)")
+    logger.info("  - /api/candles/* (historical OHLCV from ClickHouse)")
     
     # Sync instruments on startup
     from modules.market_data.services import instrument_registry
@@ -131,6 +132,14 @@ async def startup():
         logger.info("Redis Pipeline started")
     except Exception as e:
         logger.warning(f"Failed to start Redis Pipeline: {e}")
+    
+    # Start Candle Ingestor (Stage 7)
+    from modules.market_data.services import candle_ingestor
+    try:
+        await candle_ingestor.start()
+        logger.info("Candle Ingestor started")
+    except Exception as e:
+        logger.warning(f"Failed to start Candle Ingestor: {e}")
 
 @app.on_event("shutdown")
 async def shutdown():
