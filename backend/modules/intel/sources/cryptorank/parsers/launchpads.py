@@ -2,31 +2,22 @@
 Launchpads parser for CryptoRank
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List
 
 
 def parse_launchpads(data: List[Dict]) -> List[Dict]:
     """
     Parse launchpads from CryptoRank.
     
-    Expected input format (from /v1/launchpads):
+    Input format:
     {
-        "key": "binance-launchpad",
-        "name": "Binance Launchpad",
-        "type": "IEO",
-        "projectsCount": 45,
-        "totalRaised": 500000000,
-        "athRoi": 150.5,
-        "avgRoi": 12.3,
-        "avgAthRoi": 45.6,
-        "links": {...},
-        "image": {...}
+        "id": 46,
+        "key": "seedify",
+        "name": "Seedify",
+        "icon": "...",
+        "rank": 17,
+        "type": "IDO"
     }
-    
-    This data is valuable for:
-    - Project scoring (which launchpad?)
-    - Historical ROI analysis
-    - Launchpad activity tracking
     """
     results = []
     
@@ -39,8 +30,14 @@ def parse_launchpads(data: List[Dict]) -> List[Dict]:
         
         key = f"cryptorank:launchpad:{lp_key}"
         
-        # Parse links
-        links = lp.get('links') or {}
+        # Determine tier based on rank
+        rank = lp.get('rank') or 999
+        if rank <= 5:
+            tier = 1
+        elif rank <= 20:
+            tier = 2
+        else:
+            tier = 3
         
         doc = {
             'key': key,
@@ -49,25 +46,14 @@ def parse_launchpads(data: List[Dict]) -> List[Dict]:
             
             'name': lp_name,
             'slug': lp_key,
-            'type': lp.get('type'),  # IEO, IDO, etc.
+            'type': lp.get('type'),  # IDO, IEO, ICO
             
-            # Stats - very valuable for launchpad scoring
-            'projects_count': lp.get('projectsCount') or lp.get('projects_count') or 0,
-            'total_raised': lp.get('totalRaised') or lp.get('total_raised'),
+            # Ranking
+            'rank': rank,
+            'tier': tier,
             
-            # ROI metrics
-            'ath_roi': lp.get('athRoi') or lp.get('ath_roi'),
-            'avg_roi': lp.get('avgRoi') or lp.get('avg_roi'),
-            'avg_ath_roi': lp.get('avgAthRoi') or lp.get('avg_ath_roi'),
-            
-            # Links
-            'website': links.get('website') if isinstance(links, dict) else None,
-            'twitter': links.get('twitter') if isinstance(links, dict) else None,
-            
-            # Image
-            'image': lp.get('image', {}).get('native') if isinstance(lp.get('image'), dict) else None,
-            
-            'raw': lp
+            # Media
+            'icon': lp.get('icon'),
         }
         
         results.append(doc)

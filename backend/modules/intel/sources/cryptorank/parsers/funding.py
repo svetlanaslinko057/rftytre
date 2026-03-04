@@ -1,5 +1,6 @@
 """
 Funding rounds parser for CryptoRank
+Parses data from /v0/coins/funding-rounds endpoint
 """
 
 from typing import Dict, List, Any, Optional
@@ -7,22 +8,19 @@ from datetime import datetime
 
 
 def parse_timestamp(value: Any) -> Optional[int]:
-    """Convert various date formats to unix timestamp"""
+    """Convert date string to unix timestamp"""
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        # Already timestamp - check if ms or seconds
         return int(value) if value < 1e12 else int(value / 1000)
     if isinstance(value, str):
         try:
-            # Try ISO format
             dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
             return int(dt.timestamp())
         except:
             pass
         try:
-            # Try common formats
-            for fmt in ['%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%d/%m/%Y']:
+            for fmt in ['%Y-%m-%d', '%Y-%m-%dT%H:%M:%S']:
                 dt = datetime.strptime(value, fmt)
                 return int(dt.timestamp())
         except:
@@ -34,92 +32,93 @@ def parse_funding(data: List[Dict]) -> List[Dict]:
     """
     Parse funding rounds from CryptoRank.
     
-    Expected input format (from /v1/funding):
+    Input format:
     {
-        "key": "kaito-seed-2025-02-28",
-        "coin": {"key": "kaito", "name": "Kaito", "symbol": "KAITO", ...},
-        "round": {"key": "seed", "name": "Seed"},
-        "date": "2025-02-28",
-        "amount": 10000000,
-        "valuation": null,
-        "investors": [
-            {"key": "paradigm", "name": "Paradigm", "tier": "1", ...},
-            ...
-        ],
-        "leadInvestors": [{"key": "paradigm", ...}]
+        "key": "cyclops",
+        "name": "Cyclops",
+        "symbol": null,
+        "icon": "...",
+        "raise": 8000000,
+        "stage": "STRATEGIC",
+        "date": "2026-03-04",
+        "funds": [
+            {
+                "key": "castle-island-ventures",
+                "name": "Castle Island Ventures",
+                "tier": 2,
+                "type": "NORMAL",
+                "category": {"name": "venture"},
+                "totalInvestments": 48
+            }
+        ]
     }
     """
     results = []
     
     for r in data:
-        coin = r.get('coin') or {}
-        symbol = (coin.get('symbol') or '').upper()
+        project_key = r.get('key')
+        project_name = r.get('name')
         
-        if not symbol:
+        if not project_key or not project_name:
             continue
         
-        project_name = coin.get('name') or symbol
-        project_key = coin.get('key') or symbol.lower()
-        
-        # Round info
-        round_obj = r.get('round') or {}
-        round_name = round_obj.get('name') or round_obj.get('key') or 'unknown'
-        
-        # Date
+        symbol = r.get('symbol') or ''
+        stage = r.get('stage') or 'unknown'
         date = parse_timestamp(r.get('date'))
         
         # Create unique key
-        cr_key = r.get('key') or f"{project_key}-{round_name}-{date or 'nodate'}"
-        key = f"cryptorank:funding:{cr_key}"
+        date_str = r.get('date', 'nodate')
+        key = f"cryptorank:funding:{project_key}-{stage}-{date_str}".lower()
         
-        # Parse investors
+        # Parse investors from funds array
         investors = []
         lead_investors = []
         
-        for inv in (r.get('investors') or []):
-            inv_name = inv.get('name') or inv.get('key')
-            if inv_name:
-                investors.append({
-                    'name': inv_name,
-                    'key': inv.get('key'),
-                    'tier': inv.get('tier'),
-                    'type': inv.get('type')
-                })
-        
-        for inv in (r.get('leadInvestors') or []):
-            inv_name = inv.get('name') or inv.get('key')
-            if inv_name:
-                lead_investors.append(inv_name)
+        for fund in (r.get('funds') or []):
+            fund_name = fund.get('name')
+            if not fund_name:
+                continue
+            
+            inv = {
+                'name': fund_name,
+                'key': fund.get('key'),
+                'tier': fund.get('tier'),
+                'type': fund.get('type'),
+                'category': fund.get('category', {}).get('name') if isinstance(fund.get('category'), dict) else None,
+                'total_investments': fund.get('totalInvestments')
+            }
+            investors.append(inv)
+            
+            # Tier 1 investors are lead
+            if fund.get('tier') == 1:
+                lead_investors.append(fund_name)
         
         doc = {
             'key': key,
             'source': 'cryptorank',
-            'source_key': cr_key,
+            'source_key': project_key,
             
             # Project info
             'project': project_name,
             'project_key': project_key,
-            'symbol': symbol,
+            'symbol': symbol.upper() if symbol else None,
+            'icon': r.get('icon'),
             
             # Round details
-            'round': round_name,
+            'round': stage,
             'date': date,
             
-            # Amounts
-            'amount': r.get('amount'),
-            'valuation': r.get('valuation'),
+            # Amount
+            'amount': r.get('raise'),
             
             # Investors
             'investors': investors,
             'investors_count': len(investors),
             'lead_investors': lead_investors,
             
-            # Coin metadata
-            'coin_rank': coin.get('rank'),
-            'coin_category': coin.get('category', {}).get('name') if isinstance(coin.get('category'), dict) else None,
-            
-            # Raw for debugging
-            'raw': r
+            # Extra metadata
+            'country': r.get('country'),
+            'twitter_score': r.get('twitterScore'),
         }
         
         results.append(doc)
