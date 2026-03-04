@@ -1,8 +1,15 @@
 """
 CryptoRank API Client
 Base URL: https://api.cryptorank.io
+
+NOTE: CryptoRank API requires an API key for authentication.
+Get your key at: https://cryptorank.io/public-api
+
+Usage:
+  Set CRYPTORANK_API_KEY environment variable or pass api_key to client
 """
 
+import os
 import logging
 from typing import Optional, Dict, Any, List
 from ...common.http_client import HttpClient
@@ -12,22 +19,20 @@ logger = logging.getLogger(__name__)
 # CryptoRank API Endpoints
 ENDPOINTS = {
     # Funding & Investors
-    'funding': '/v1/funding',
-    'investors': '/v0/coins/investors',
-    'top_investors': '/v1/investors',
+    'funding': '/v1/funding-rounds',
+    'investors': '/v1/funds',
     
     # Token Unlocks
-    'unlock_feed': '/v0/token-unlock-dynamics',
-    'unlock_tge': '/v0/token-unlock-dynamics/tge',
-    'unlock_totals': '/v0/token-unlock-dynamics/totals',
+    'unlocks': '/v1/token-unlocks',
     
-    # Projects & Categories
+    # Projects & Categories  
     'coins': '/v1/currencies',
-    'coin_detail': '/v1/currencies/{slug}',
+    'coin_detail': '/v1/currencies/{key}',
     'categories': '/v1/categories',
     
     # Launchpads & Exchanges
-    'launchpads': '/v1/launchpads',
+    'launchpads': '/v1/ido-platforms',
+    'ieo_platforms': '/v1/ieo-platforms',
     'exchanges': '/v1/exchanges',
 }
 
@@ -36,9 +41,13 @@ class CryptoRankClient:
     """
     Client for CryptoRank API.
     All methods return raw JSON data.
+    
+    Requires API key from https://cryptorank.io/public-api
     """
     
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.environ.get('CRYPTORANK_API_KEY')
+        
         self.http = HttpClient(
             base_url='https://api.cryptorank.io',
             min_interval_ms=1200,  # Be conservative with rate limits
@@ -46,12 +55,20 @@ class CryptoRankClient:
         )
         # Override headers for CryptoRank
         self.http.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'User-Agent': 'FOMO-Market-API/1.0',
             'Accept': 'application/json',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Origin': 'https://cryptorank.io',
-            'Referer': 'https://cryptorank.io/',
         }
+    
+    def _add_api_key(self, params: Optional[Dict] = None) -> Dict:
+        """Add API key to params"""
+        params = params or {}
+        if self.api_key:
+            params['api_key'] = self.api_key
+        return params
+    
+    def is_configured(self) -> bool:
+        """Check if API key is configured"""
+        return bool(self.api_key)
     
     # ═══════════════════════════════════════════════════════════════
     # FUNDING & INVESTORS
@@ -68,104 +85,77 @@ class CryptoRankClient:
         Fetch funding rounds.
         Returns: {data: [...], total: int}
         """
+        if not self.is_configured():
+            logger.warning("[CryptoRank] API key not configured. Set CRYPTORANK_API_KEY env var.")
+            return {'data': [], 'total': 0}
+        
         try:
-            params = {
+            params = self._add_api_key({
                 'limit': limit,
                 'offset': offset,
                 'sortBy': sort_by,
                 'sortDirection': sort_dir
-            }
+            })
             data = await self.http.get(ENDPOINTS['funding'], params=params)
             return data or {'data': [], 'total': 0}
         except Exception as e:
             logger.error(f"[CryptoRank] funding failed: {e}")
             return {'data': [], 'total': 0}
     
-    async def investors(self, coin_key: str) -> List[Dict]:
-        """
-        Fetch investors for a specific coin.
-        """
-        try:
-            params = {'coinKey': coin_key}
-            data = await self.http.get(ENDPOINTS['investors'], params=params)
-            return self._extract_list(data)
-        except Exception as e:
-            logger.error(f"[CryptoRank] investors for {coin_key} failed: {e}")
-            return []
-    
-    async def top_investors(
+    async def investors(
         self,
         limit: int = 100,
         offset: int = 0
     ) -> Dict:
         """
-        Fetch top investors/VCs list.
+        Fetch investors/funds list.
         Returns: {data: [...], total: int}
         """
+        if not self.is_configured():
+            logger.warning("[CryptoRank] API key not configured")
+            return {'data': [], 'total': 0}
+        
         try:
-            params = {
+            params = self._add_api_key({
                 'limit': limit,
                 'offset': offset
-            }
-            data = await self.http.get(ENDPOINTS['top_investors'], params=params)
+            })
+            data = await self.http.get(ENDPOINTS['investors'], params=params)
             return data or {'data': [], 'total': 0}
         except Exception as e:
-            logger.error(f"[CryptoRank] top_investors failed: {e}")
+            logger.error(f"[CryptoRank] investors failed: {e}")
             return {'data': [], 'total': 0}
     
     # ═══════════════════════════════════════════════════════════════
     # TOKEN UNLOCKS
     # ═══════════════════════════════════════════════════════════════
     
-    async def unlock_feed(
+    async def unlocks(
         self,
-        limit: int = 50,
+        limit: int = 100,
         offset: int = 0,
-        period: str = '1m',
-        sort_by: str = 'date'
+        period: str = '1m'
     ) -> Dict:
         """
-        Fetch token unlock feed.
+        Fetch token unlock schedule.
         period: 1w, 2w, 1m, 3m, 6m, 1y
         Returns: {data: [...]}
         """
+        if not self.is_configured():
+            logger.warning("[CryptoRank] API key not configured")
+            return {'data': []}
+        
         try:
-            params = {
+            params = self._add_api_key({
                 'limit': limit,
                 'offset': offset,
-                'period': period,
-                'sortBy': sort_by
-            }
-            data = await self.http.get(ENDPOINTS['unlock_feed'], params=params)
+                'period': period
+            })
+            data = await self.http.get(ENDPOINTS['unlocks'], params=params)
             return data or {'data': []}
         except Exception as e:
-            logger.error(f"[CryptoRank] unlock_feed failed: {e}")
+            logger.error(f"[CryptoRank] unlocks failed: {e}")
             return {'data': []}
-    
-    async def unlock_tge(self, limit: int = 50, offset: int = 0) -> Dict:
-        """
-        Fetch TGE (Token Generation Event) unlocks.
-        These are initial unlocks at token launch.
-        """
-        try:
-            params = {'limit': limit, 'offset': offset}
-            data = await self.http.get(ENDPOINTS['unlock_tge'], params=params)
-            return data or {'data': []}
-        except Exception as e:
-            logger.error(f"[CryptoRank] unlock_tge failed: {e}")
-            return {'data': []}
-    
-    async def unlock_totals(self) -> Dict:
-        """
-        Fetch aggregated unlock totals.
-        Useful for market-wide sell pressure metrics.
-        """
-        try:
-            data = await self.http.get(ENDPOINTS['unlock_totals'])
-            return data or {}
-        except Exception as e:
-            logger.error(f"[CryptoRank] unlock_totals failed: {e}")
-            return {}
     
     # ═══════════════════════════════════════════════════════════════
     # PROJECTS / COINS
@@ -181,28 +171,36 @@ class CryptoRankClient:
         Fetch cryptocurrency list.
         Returns: {data: [...], total: int}
         """
+        if not self.is_configured():
+            logger.warning("[CryptoRank] API key not configured")
+            return {'data': [], 'total': 0}
+        
         try:
-            params = {
+            params = self._add_api_key({
                 'limit': limit,
                 'offset': offset,
                 'sortBy': sort_by
-            }
+            })
             data = await self.http.get(ENDPOINTS['coins'], params=params)
             return data or {'data': [], 'total': 0}
         except Exception as e:
             logger.error(f"[CryptoRank] coins failed: {e}")
             return {'data': [], 'total': 0}
     
-    async def coin_detail(self, slug: str) -> Optional[Dict]:
+    async def coin_detail(self, key: str) -> Optional[Dict]:
         """
         Fetch detailed info for a specific coin.
         """
+        if not self.is_configured():
+            return None
+        
         try:
-            endpoint = ENDPOINTS['coin_detail'].format(slug=slug)
-            data = await self.http.get(endpoint)
+            endpoint = ENDPOINTS['coin_detail'].format(key=key)
+            params = self._add_api_key()
+            data = await self.http.get(endpoint, params=params)
             return data.get('data') if data else None
         except Exception as e:
-            logger.error(f"[CryptoRank] coin_detail for {slug} failed: {e}")
+            logger.error(f"[CryptoRank] coin_detail for {key} failed: {e}")
             return None
     
     # ═══════════════════════════════════════════════════════════════
@@ -213,8 +211,11 @@ class CryptoRankClient:
         """
         Fetch crypto categories (DeFi, Layer2, etc.)
         """
+        if not self.is_configured():
+            return {'data': []}
+        
         try:
-            params = {'limit': limit}
+            params = self._add_api_key({'limit': limit})
             data = await self.http.get(ENDPOINTS['categories'], params=params)
             return data or {'data': []}
         except Exception as e:
@@ -223,22 +224,43 @@ class CryptoRankClient:
     
     async def launchpads(self, limit: int = 50, offset: int = 0) -> Dict:
         """
-        Fetch launchpad platforms (Binance Launchpad, etc.)
+        Fetch IDO launchpad platforms
         """
+        if not self.is_configured():
+            return {'data': []}
+        
         try:
-            params = {'limit': limit, 'offset': offset}
+            params = self._add_api_key({'limit': limit, 'offset': offset})
             data = await self.http.get(ENDPOINTS['launchpads'], params=params)
             return data or {'data': []}
         except Exception as e:
             logger.error(f"[CryptoRank] launchpads failed: {e}")
             return {'data': []}
     
+    async def ieo_platforms(self, limit: int = 50) -> Dict:
+        """
+        Fetch IEO platforms (CEX launchpads)
+        """
+        if not self.is_configured():
+            return {'data': []}
+        
+        try:
+            params = self._add_api_key({'limit': limit})
+            data = await self.http.get(ENDPOINTS['ieo_platforms'], params=params)
+            return data or {'data': []}
+        except Exception as e:
+            logger.error(f"[CryptoRank] ieo_platforms failed: {e}")
+            return {'data': []}
+    
     async def exchanges(self, limit: int = 100) -> Dict:
         """
         Fetch exchanges list.
         """
+        if not self.is_configured():
+            return {'data': []}
+        
         try:
-            params = {'limit': limit}
+            params = self._add_api_key({'limit': limit})
             data = await self.http.get(ENDPOINTS['exchanges'], params=params)
             return data or {'data': []}
         except Exception as e:
@@ -262,5 +284,5 @@ class CryptoRankClient:
         return []
 
 
-# Singleton
+# Singleton - initialized with env var
 cryptorank_client = CryptoRankClient()
