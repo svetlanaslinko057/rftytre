@@ -1,6 +1,9 @@
 """
 CryptoRank Sync Service
-Scrapes data from CryptoRank frontend API (no API key required)
+Processes JSON data from CryptoRank (scraped via browser or manual fetch).
+
+This is a SCRAPER service - it receives JSON data and stores it.
+No automatic API fetching - data is provided externally.
 """
 
 import logging
@@ -8,14 +11,14 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from .client import cryptorank_client
 from .parsers import (
+    parse_categories,
     parse_funding,
     parse_top_investors,
     parse_unlocks,
     parse_tge_unlocks,
     parse_launchpads,
-    parse_categories
+    parse_market
 )
 from ...common.storage import upsert_with_diff, push_to_moderation
 
@@ -25,46 +28,72 @@ logger = logging.getLogger(__name__)
 class CryptoRankSync:
     """
     Sync service for CryptoRank data.
-    Uses public frontend endpoints - no API key needed.
+    Receives JSON data and stores it in MongoDB.
+    
+    Usage:
+        sync = CryptoRankSync(db)
+        await sync.ingest_funding(json_data)
+        await sync.ingest_investors(json_data)
     """
     
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
-        self.client = cryptorank_client
     
-    async def sync_funding(self, max_pages: int = 5) -> Dict[str, Any]:
+    async def ingest_categories(self, json_data: List[Dict]) -> Dict[str, Any]:
         """
-        Sync funding rounds with pagination.
+        Ingest categories data.
+        
+        Expected format:
+        [
+            {"id": 54, "name": "DeFi", "slug": "defi", ...},
+            ...
+        ]
         """
-        logger.info("[CryptoRank] Syncing funding rounds...")
+        logger.info("[CryptoRank] Ingesting categories...")
         
-        all_docs = []
-        offset = 0
-        limit = 50
+        data = json_data if isinstance(json_data, list) else json_data.get('data', [])
+        docs = parse_categories(data)
         
-        for page in range(max_pages):
-            response = await self.client.funding(limit=limit, offset=offset)
-            data = response.get('data', [])
-            
-            if not data:
-                break
-            
-            docs = parse_funding(data)
-            all_docs.extend(docs)
-            
-            offset += limit
-            total = response.get('total', 0)
-            
-            logger.debug(f"[CryptoRank] Funding page {page + 1}: {len(data)} items")
-            
-            if offset >= total or total == 0:
-                break
+        collection = self.db.intel_categories
+        changed = 0
         
-        # Upsert to MongoDB
+        for doc in docs:
+            result = await upsert_with_diff(collection, doc)
+            if result['changed']:
+                changed += 1
+        
+        logger.info(f"[CryptoRank] Categories: {len(docs)} total, {changed} changed")
+        return {'total': len(docs), 'changed': changed}
+    
+    async def ingest_funding(self, json_data: Dict) -> Dict[str, Any]:
+        """
+        Ingest funding rounds data.
+        
+        Expected format:
+        {
+            "total": 10851,
+            "data": [
+                {
+                    "key": "cyclops",
+                    "name": "Cyclops",
+                    "raise": 8000000,
+                    "stage": "STRATEGIC",
+                    "date": "2026-03-04",
+                    "funds": [...]
+                },
+                ...
+            ]
+        }
+        """
+        logger.info("[CryptoRank] Ingesting funding rounds...")
+        
+        data = json_data.get('data', []) if isinstance(json_data, dict) else json_data
+        docs = parse_funding(data)
+        
         collection = self.db.intel_fundraising
         changed = 0
         
-        for doc in all_docs:
+        for doc in docs:
             result = await upsert_with_diff(collection, doc)
             if result['changed'] and result['change_type']:
                 changed += 1
@@ -73,19 +102,24 @@ class CryptoRankSync:
                     doc['key'], doc, result['change_type']
                 )
         
-        logger.info(f"[CryptoRank] Funding: {len(all_docs)} total, {changed} changed")
-        return {'total': len(all_docs), 'changed': changed}
+        logger.info(f"[CryptoRank] Funding: {len(docs)} total, {changed} changed")
+        return {'total': len(docs), 'changed': changed}
     
-    async def sync_investors(self) -> Dict[str, Any]:
+    async def ingest_investors(self, json_data: List[Dict]) -> Dict[str, Any]:
         """
-        Sync top investors list.
-        """
-        logger.info("[CryptoRank] Syncing investors...")
+        Ingest investors data.
         
-        data = await self.client.top_investors(limit=100)
+        Expected format:
+        [
+            {"slug": "coinbase-ventures", "name": "Coinbase Ventures", "count": 38, ...},
+            ...
+        ]
+        """
+        logger.info("[CryptoRank] Ingesting investors...")
+        
+        data = json_data if isinstance(json_data, list) else json_data.get('data', [])
         docs = parse_top_investors(data)
         
-        # Upsert to MongoDB
         collection = self.db.intel_investors
         changed = 0
         
@@ -101,51 +135,39 @@ class CryptoRankSync:
         logger.info(f"[CryptoRank] Investors: {len(docs)} total, {changed} changed")
         return {'total': len(docs), 'changed': changed}
     
-    async def sync_unlocks(self, max_pages: int = 3) -> Dict[str, Any]:
+    async def ingest_unlocks(self, json_data: List[Dict], unlock_type: str = 'vesting') -> Dict[str, Any]:
         """
-        Sync token unlocks (vesting + TGE).
+        Ingest token unlocks data.
+        
+        Expected format:
+        [
+            {
+                "key": "movement-labs",
+                "symbol": "MOVE",
+                "unlockUsd": 3695283,
+                "tokensPercent": 4.8,
+                "unlockDate": "2026-03-09"
+            },
+            ...
+        ]
+        
+        Args:
+            json_data: List of unlock events
+            unlock_type: 'vesting' or 'tge'
         """
-        logger.info("[CryptoRank] Syncing token unlocks...")
+        logger.info(f"[CryptoRank] Ingesting {unlock_type} unlocks...")
         
-        all_docs = []
-        seen_keys = set()
+        data = json_data if isinstance(json_data, list) else json_data.get('data', [])
         
-        # Fetch vesting unlocks
-        offset = 0
-        limit = 50
-        
-        for page in range(max_pages):
-            response = await self.client.unlocks(limit=limit, offset=offset)
-            data = response.get('data', [])
-            
-            if not data:
-                break
-            
+        if unlock_type == 'tge':
+            docs = parse_tge_unlocks(data)
+        else:
             docs = parse_unlocks(data)
-            
-            for doc in docs:
-                if doc['key'] not in seen_keys:
-                    all_docs.append(doc)
-                    seen_keys.add(doc['key'])
-            
-            offset += limit
-            logger.debug(f"[CryptoRank] Unlocks page {page + 1}: {len(data)} items")
         
-        # Also fetch TGE unlocks
-        tge_response = await self.client.unlock_tge(limit=50)
-        tge_data = tge_response.get('data', [])
-        tge_docs = parse_tge_unlocks(tge_data)
-        
-        for doc in tge_docs:
-            if doc['key'] not in seen_keys:
-                all_docs.append(doc)
-                seen_keys.add(doc['key'])
-        
-        # Upsert to MongoDB
         collection = self.db.intel_unlocks
         changed = 0
         
-        for doc in all_docs:
+        for doc in docs:
             result = await upsert_with_diff(collection, doc)
             if result['changed'] and result['change_type']:
                 changed += 1
@@ -154,18 +176,23 @@ class CryptoRankSync:
                     doc['key'], doc, result['change_type']
                 )
         
-        logger.info(f"[CryptoRank] Unlocks: {len(all_docs)} total, {changed} changed")
-        return {'total': len(all_docs), 'changed': changed}
+        logger.info(f"[CryptoRank] Unlocks ({unlock_type}): {len(docs)} total, {changed} changed")
+        return {'total': len(docs), 'changed': changed}
     
-    async def sync_unlock_totals(self) -> Dict[str, Any]:
+    async def ingest_unlock_totals(self, json_data: List[Dict]) -> Dict[str, Any]:
         """
-        Sync market-wide unlock totals (for sell pressure analysis).
+        Ingest market-wide unlock totals.
+        
+        Expected format:
+        [
+            {"usdUnlock": 88113695, "timePoint": "2026-03-01"},
+            ...
+        ]
         """
-        logger.info("[CryptoRank] Syncing unlock totals...")
+        logger.info("[CryptoRank] Ingesting unlock totals...")
         
-        data = await self.client.unlock_totals()
+        data = json_data if isinstance(json_data, list) else json_data.get('data', [])
         
-        # Store in separate collection for market metrics
         collection = self.db.market_unlocks
         changed = 0
         
@@ -190,13 +217,19 @@ class CryptoRankSync:
         logger.info(f"[CryptoRank] Unlock totals: {len(data)} total, {changed} changed")
         return {'total': len(data), 'changed': changed}
     
-    async def sync_launchpads(self) -> Dict[str, Any]:
+    async def ingest_launchpads(self, json_data: List[Dict]) -> Dict[str, Any]:
         """
-        Sync launchpad platforms.
-        """
-        logger.info("[CryptoRank] Syncing launchpads...")
+        Ingest launchpads data.
         
-        data = await self.client.launchpads(limit=200)
+        Expected format:
+        [
+            {"id": 46, "key": "seedify", "name": "Seedify", "type": "IDO", ...},
+            ...
+        ]
+        """
+        logger.info("[CryptoRank] Ingesting launchpads...")
+        
+        data = json_data if isinstance(json_data, list) else json_data.get('data', [])
         docs = parse_launchpads(data)
         
         collection = self.db.intel_launchpads
@@ -210,53 +243,82 @@ class CryptoRankSync:
         logger.info(f"[CryptoRank] Launchpads: {len(docs)} total, {changed} changed")
         return {'total': len(docs), 'changed': changed}
     
-    async def sync_categories(self) -> Dict[str, Any]:
+    async def ingest_market(self, json_data: Dict) -> Dict[str, Any]:
         """
-        Sync crypto categories/sectors.
+        Ingest market overview data.
+        
+        Expected format:
+        {
+            "btcDominance": 56.97,
+            "ethDominance": 10.08,
+            "totalMarketCap": 2563526299439,
+            "totalVolume24h": ...,
+            "gas": {...}
+        }
         """
-        logger.info("[CryptoRank] Syncing categories...")
+        logger.info("[CryptoRank] Ingesting market data...")
         
-        data = await self.client.categories()
-        docs = parse_categories(data)
+        doc = parse_market(json_data)
         
-        collection = self.db.intel_categories
-        changed = 0
+        collection = self.db.intel_market
         
-        for doc in docs:
-            result = await upsert_with_diff(collection, doc)
-            if result['changed']:
-                changed += 1
+        # Use timestamp as key for historical tracking
+        doc['key'] = f"cryptorank:market:{doc['timestamp']}"
         
-        logger.info(f"[CryptoRank] Categories: {len(docs)} total, {changed} changed")
-        return {'total': len(docs), 'changed': changed}
+        result = await upsert_with_diff(collection, doc)
+        
+        logger.info(f"[CryptoRank] Market: 1 record, {'changed' if result['changed'] else 'unchanged'}")
+        return {'total': 1, 'changed': 1 if result['changed'] else 0}
     
-    async def sync_all(self) -> Dict[str, Any]:
+    async def ingest_all(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Run full sync of all CryptoRank data types.
+        Ingest all data types at once.
+        
+        Expected format:
+        {
+            "categories": [...],
+            "funding": {...},
+            "investors": [...],
+            "unlocks": [...],
+            "tge_unlocks": [...],
+            "unlock_totals": [...],
+            "launchpads": [...],
+            "market": {...}
+        }
         """
-        logger.info("[CryptoRank] Starting full sync...")
+        logger.info("[CryptoRank] Starting full ingest...")
         
         results = {
             'source': 'cryptorank',
             'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
-            'syncs': {}
+            'ingests': {}
         }
         
-        sync_tasks = [
-            ('funding', self.sync_funding),
-            ('investors', self.sync_investors),
-            ('unlocks', self.sync_unlocks),
-            ('unlock_totals', self.sync_unlock_totals),
-            ('launchpads', self.sync_launchpads),
-            ('categories', self.sync_categories),
-        ]
+        ingest_map = {
+            'categories': self.ingest_categories,
+            'funding': self.ingest_funding,
+            'investors': self.ingest_investors,
+            'unlocks': self.ingest_unlocks,
+            'unlock_totals': self.ingest_unlock_totals,
+            'launchpads': self.ingest_launchpads,
+            'market': self.ingest_market,
+        }
         
-        for name, sync_func in sync_tasks:
+        for key, ingest_func in ingest_map.items():
+            if key in data and data[key]:
+                try:
+                    results['ingests'][key] = await ingest_func(data[key])
+                except Exception as e:
+                    logger.error(f"[CryptoRank] {key} ingest failed: {e}")
+                    results['ingests'][key] = {'error': str(e)}
+        
+        # Handle TGE unlocks separately
+        if 'tge_unlocks' in data and data['tge_unlocks']:
             try:
-                results['syncs'][name] = await sync_func()
+                results['ingests']['tge_unlocks'] = await self.ingest_unlocks(data['tge_unlocks'], 'tge')
             except Exception as e:
-                logger.error(f"[CryptoRank] {name} sync failed: {e}")
-                results['syncs'][name] = {'error': str(e)}
+                logger.error(f"[CryptoRank] tge_unlocks ingest failed: {e}")
+                results['ingests']['tge_unlocks'] = {'error': str(e)}
         
-        logger.info(f"[CryptoRank] Full sync complete")
+        logger.info(f"[CryptoRank] Full ingest complete")
         return results
