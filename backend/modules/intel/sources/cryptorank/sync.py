@@ -322,3 +322,80 @@ class CryptoRankSync:
         
         logger.info(f"[CryptoRank] Full ingest complete")
         return results
+
+
+    # ═══════════════════════════════════════════════════════════════
+    # PAGINATION HELPERS
+    # ═══════════════════════════════════════════════════════════════
+    
+    async def ingest_funding_page(self, page_data: Dict, page_num: int = 0) -> Dict[str, Any]:
+        """
+        Ingest a single page of funding data.
+        Useful for incremental sync.
+        
+        Args:
+            page_data: Single page response from CryptoRank
+            page_num: Page number for logging
+        
+        Returns:
+            {total, changed, page}
+        """
+        result = await self.ingest_funding(page_data)
+        result['page'] = page_num
+        return result
+    
+    async def ingest_funding_batch(self, pages: List[Dict]) -> Dict[str, Any]:
+        """
+        Ingest multiple pages of funding data.
+        
+        Args:
+            pages: List of page responses, each with {"total": N, "data": [...]}
+        
+        Returns:
+            {total, changed, pages_processed}
+        """
+        logger.info(f"[CryptoRank] Batch ingesting {len(pages)} funding pages...")
+        
+        total_docs = 0
+        total_changed = 0
+        
+        for i, page_data in enumerate(pages):
+            result = await self.ingest_funding(page_data)
+            total_docs += result.get('total', 0)
+            total_changed += result.get('changed', 0)
+            logger.debug(f"[CryptoRank] Page {i+1}: {result.get('total', 0)} items")
+        
+        logger.info(f"[CryptoRank] Batch complete: {total_docs} total, {total_changed} changed")
+        return {
+            'total': total_docs,
+            'changed': total_changed,
+            'pages_processed': len(pages)
+        }
+    
+    async def get_sync_stats(self) -> Dict[str, Any]:
+        """
+        Get sync statistics for CryptoRank data.
+        """
+        stats = {
+            'source': 'cryptorank',
+            'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+            'collections': {}
+        }
+        
+        # Count documents by source
+        collections = [
+            ('funding', 'intel_fundraising'),
+            ('investors', 'intel_investors'),
+            ('unlocks', 'intel_unlocks'),
+            ('launchpads', 'intel_launchpads'),
+            ('categories', 'intel_categories'),
+            ('market', 'intel_market'),
+            ('unlock_totals', 'market_unlocks'),
+        ]
+        
+        for name, coll_name in collections:
+            coll = self.db[coll_name]
+            count = await coll.count_documents({'source': 'cryptorank'})
+            stats['collections'][name] = count
+        
+        return stats
