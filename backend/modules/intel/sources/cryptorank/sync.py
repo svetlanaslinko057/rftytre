@@ -1,6 +1,9 @@
 """
 CryptoRank Sync Service
 Handles syncing all data types and pushing to moderation queue
+
+NOTE: Requires CRYPTORANK_API_KEY environment variable.
+Get your key at: https://cryptorank.io/public-api
 """
 
 import logging
@@ -11,10 +14,8 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from .client import cryptorank_client
 from .parsers import (
     parse_funding,
-    parse_investors,
     parse_top_investors,
     parse_unlocks,
-    parse_tge_unlocks,
     parse_projects,
     parse_launchpads,
     parse_categories
