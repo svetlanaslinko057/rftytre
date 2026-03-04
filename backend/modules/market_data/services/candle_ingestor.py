@@ -210,12 +210,12 @@ class CandleIngestor:
                     'exchange': exchange,
                     'symbol': instrument_id,  # Use normalized ID
                     'tf': tf,
-                    'ts': c.ts / 1000 if c.ts > 1e10 else c.ts,  # Handle ms vs s
-                    'open': c.open,
-                    'high': c.high,
-                    'low': c.low,
-                    'close': c.close,
-                    'volume': c.volume
+                    'ts': c.t / 1000 if c.t > 1e10 else c.t,  # Handle ms vs s
+                    'open': c.o,
+                    'high': c.h,
+                    'low': c.l,
+                    'close': c.c,
+                    'volume': c.v
                 })
             
             # Insert to ClickHouse
