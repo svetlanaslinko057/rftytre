@@ -125,6 +125,93 @@ async def cryptorank_status():
 
 
 # ═══════════════════════════════════════════════════════════════
+# CRYPTORANK INGEST ENDPOINTS (POST JSON data)
+# ═══════════════════════════════════════════════════════════════
+
+@router.post("/ingest/cryptorank")
+async def ingest_cryptorank_all(
+    data: Dict[str, Any],
+    sync = Depends(get_cryptorank_sync)
+):
+    """
+    Ingest all CryptoRank data at once.
+    
+    Body format:
+    {
+        "categories": [...],
+        "funding": {"total": ..., "data": [...]},
+        "investors": [...],
+        "unlocks": [...],
+        "tge_unlocks": [...],
+        "unlock_totals": [...],
+        "launchpads": [...],
+        "market": {...}
+    }
+    """
+    result = await sync.ingest_all(data)
+    return result
+
+
+@router.post("/ingest/cryptorank/{entity}")
+async def ingest_cryptorank_entity(
+    entity: str,
+    data: Any,
+    sync = Depends(get_cryptorank_sync)
+):
+    """
+    Ingest specific entity data from CryptoRank.
+    
+    POST JSON data for the entity type.
+    """
+    if entity == 'funding' or entity == 'fundraising':
+        result = await sync.ingest_funding(data)
+    elif entity == 'investors':
+        result = await sync.ingest_investors(data)
+    elif entity == 'unlocks':
+        result = await sync.ingest_unlocks(data, 'vesting')
+    elif entity == 'tge_unlocks':
+        result = await sync.ingest_unlocks(data, 'tge')
+    elif entity == 'unlock_totals':
+        result = await sync.ingest_unlock_totals(data)
+    elif entity == 'launchpads':
+        result = await sync.ingest_launchpads(data)
+    elif entity == 'categories':
+        result = await sync.ingest_categories(data)
+    elif entity == 'market':
+        result = await sync.ingest_market(data)
+    else:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unknown entity: {entity}. Available: funding, investors, unlocks, tge_unlocks, unlock_totals, launchpads, categories, market"
+        )
+    
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'source': 'cryptorank',
+        'entity': entity,
+        **result
+    }
+
+
+@router.get("/ingest/cryptorank/status")
+async def cryptorank_ingest_status():
+    """
+    Check CryptoRank ingest status.
+    """
+    return {
+        'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
+        'source': 'cryptorank',
+        'type': 'scraper',
+        'ready': True,
+        'message': 'CryptoRank ingest ready. POST JSON data to /ingest/cryptorank/{entity}',
+        'entities': [
+            'funding', 'investors', 'unlocks', 'tge_unlocks', 
+            'unlock_totals', 'launchpads', 'categories', 'market'
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 # INVESTORS
 # ═══════════════════════════════════════════════════════════════
 
