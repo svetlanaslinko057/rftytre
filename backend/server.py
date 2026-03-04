@@ -143,6 +143,13 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    # Stop Candle Ingestor
+    from modules.market_data.services import candle_ingestor
+    try:
+        await candle_ingestor.stop()
+    except Exception:
+        pass
+    
     # Stop Redis Pipeline
     from modules.market_data.services import redis_pipeline
     try:
