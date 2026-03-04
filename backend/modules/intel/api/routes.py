@@ -110,17 +110,17 @@ async def sync_cryptorank_entity(
 
 
 @router.get("/sync/cryptorank/status")
-async def cryptorank_status(sync = Depends(get_cryptorank_sync)):
+async def cryptorank_status():
     """
-    Check CryptoRank API configuration status.
-    Returns whether API key is configured.
+    Check CryptoRank scraper status.
+    CryptoRank uses public frontend endpoints - no API key required.
     """
-    configured = sync.is_configured()
     return {
         'ts': int(datetime.now(timezone.utc).timestamp() * 1000),
         'source': 'cryptorank',
-        'configured': configured,
-        'message': 'API key configured' if configured else 'CRYPTORANK_API_KEY not set. Get your key at https://cryptorank.io/public-api'
+        'type': 'scraper',
+        'configured': True,
+        'message': 'CryptoRank scraper ready (uses public endpoints, no API key required)'
     }
 
 
